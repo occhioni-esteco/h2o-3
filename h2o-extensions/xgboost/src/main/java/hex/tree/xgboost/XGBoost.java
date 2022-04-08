@@ -176,12 +176,20 @@ public class XGBoost extends ModelBuilder<XGBoostModel,XGBoostModel.XGBoostParam
         for (Map.Entry<String, Object> incompat : incompats.entrySet())
           error("_backend", "GPU backend is not available for parameter setting '" + incompat.getKey() + " = " + incompat.getValue() + "'. Use CPU backend instead.");
     }
+    DistributionFamily[] allowed_distributions = new DistributionFamily[] {
+            DistributionFamily.AUTO,
+            DistributionFamily.bernoulli,
+            DistributionFamily.multinomial,
+            DistributionFamily.gaussian,
+            DistributionFamily.poisson,
+            DistributionFamily.gamma,
+            DistributionFamily.tweedie,
+    };
+    if (!ArrayUtils.contains(allowed_distributions, _parms._distribution))
+      error("_distribution", _parms._distribution.name() + " is not supported for XGBoost in current H2O.");
 
-    if (_parms._distribution == DistributionFamily.quasibinomial)
-      error("_distribution", "Quasibinomial is not supported for XGBoost in current H2O.");
-
-    if (_parms._categorical_encoding == Model.Parameters.CategoricalEncodingScheme.Enum) {
-      error("_categorical_encoding", "Enum encoding is not supported for XGBoost in current H2O.");
+    if (unsupportedCategoricalEncoding()) {
+      error("_categorical_encoding", _parms._categorical_encoding + " encoding is not supported for XGBoost in current H2O.");
     }
     
     switch( _parms._distribution) {
@@ -783,6 +791,11 @@ public class XGBoost extends ModelBuilder<XGBoostModel,XGBoostModel.XGBoostParam
     warn("_ntrees", "Setting optimal _ntrees to " + _parms._ntrees + " for cross-validation main model based on early stopping of cross-validation models.");
     warn("_stopping_rounds", "Disabling convergence-based early stopping for cross-validation main model.");
     warn("_max_runtime_secs", "Disabling maximum allowed runtime for cross-validation main model.");
+  }
+
+  private boolean unsupportedCategoricalEncoding() {
+    return _parms._categorical_encoding == Model.Parameters.CategoricalEncodingScheme.Enum ||
+            _parms._categorical_encoding == Model.Parameters.CategoricalEncodingScheme.Eigen;
   }
 
 }

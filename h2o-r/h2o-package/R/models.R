@@ -152,7 +152,7 @@ NULL
 .h2o.processResponseWarnings <- function(res) {
   if(length(res$messages) != 0L){
     warn <- lapply(res$messages, function(y) {
-      if(class(y) == "list" && y$message_type == "WARN" )
+      if(is.list(y) && y$message_type == "WARN" )
         paste0(y$message, ".\n")
       else ""
     })
@@ -3003,7 +3003,7 @@ h2o.metric <- function(object, thresholds, metric, transform=NULL) {
           }
         }
       }
-    } else if (thresholds == 'max' && missing(metric)) {
+    } else if (all(thresholds == 'max') && missing(metric)) {
       metrics <- object@metrics$max_criteria_and_metric_scores
     } else {
       if (missing(metric)) {
@@ -3011,7 +3011,7 @@ h2o.metric <- function(object, thresholds, metric, transform=NULL) {
       } else {
         h2o_metric <- unlist(lapply(metric, function(m) ifelse(m %in% avail_metrics, m, ifelse(m %in% names(.h2o.metrics_aliases), .h2o.metrics_aliases[m], m))))
       }
-      if (thresholds == 'max') thresholds <- h2o.find_threshold_by_max_metric(object, h2o_metric)
+      if (all(thresholds == 'max')) thresholds <- h2o.find_threshold_by_max_metric(object, h2o_metric)
       metrics <- lapply(thresholds, function(t,o,m) h2o.find_row_by_threshold(o, t)[, m], object, h2o_metric)
       if (!missing(transform) && 'op' %in% names(transform)) {
         metrics <- lapply(metrics, transform$op)
@@ -3977,7 +3977,7 @@ setMethod("h2o.confusionMatrix", "H2OModelMetrics", function(object, thresholds=
   if( is(thresholds, "list") ) thresholds_list = thresholds
     else {
       if( is.null(thresholds) ) thresholds_list = list()
-      else thresholds_list = list(thresholds)
+      else thresholds_list = as.list(thresholds)
   }
 
   # error check the metrics_list and thresholds_list
@@ -5043,14 +5043,12 @@ h2o.partialPlot <- function(object, data, cols, destination_key, nbins=20, plot 
       legendColors <- c()
       legendLtys <- c()
       legendPchs <- c()
-      legendBtys <- c()
       for ( i in 1: length(targets)) {
         # target label
         legendTargets <- append(legendTargets, targets[i])
         legendColors <- append(legendColors, colors[i])
         legendLtys <- append(legendLtys, lty)
         legendPchs <- append(legendPchs, pch)
-        legendBtys <- append(legendBtys, "n")
         # target NAN line label
         if (has_NA[i]) {
           legendTargets <- append(legendTargets, paste(targets[i], " NAN"))
@@ -5058,9 +5056,8 @@ h2o.partialPlot <- function(object, data, cols, destination_key, nbins=20, plot 
           legendLtys <- append(legendLtys, 5)
         } 
         legendPchs <- append(legendPchs, NULL)
-        legendBtys <- append(legendBtys, NULL)
       }
-      legend("topright", legend=legendTargets, col=legendColors, lty=legendLtys, pch=legendPchs, bty=legendBtys, ncol=length(pps))
+      legend("topright", legend=legendTargets, col=legendColors, lty=legendLtys, pch=legendPchs, bty="n", ncol=length(pps))
     }  else {
       legend("topright",legend=targets, col=colors, lty=lty, pch=pch, bty="n", ncol=length(pps))
     }
@@ -5409,7 +5406,7 @@ setMethod('show', 'H2ONode',
 
 print.H2ONode <- function(node){
   cat("Node ID", node@id, "\n\n")
-  if(class(node) == "H2OLeafNode"){
+  if (inherits(node, "H2OLeafNode")){
     cat("Terminal node. Prediction is", node@prediction)
     return()
   }
@@ -5890,4 +5887,38 @@ h2o.reset_threshold <- function(object, threshold) {
     warning( paste0("Threshold cannot be reset for class ", class(o)) )
     return(NULL)
   }
+}
+
+#' Calculates per-level mean of predicted value vs actual value for a given variable.
+#'
+#' In the basic setting, this function is equivalent to doing group-by on variable and calculating
+#' mean on predicted and actual. In addition to that it also handles NAs in response and weights
+#' automatically.
+#'
+#' @param object    A trained supervised H2O model.
+#' @param newdata   Input frame (can be training/test/.. frame).
+#' @param predicted Frame of predictions for the given input frame.
+#' @param variable  Name of variable to inspect.
+#' @return          H2OTable
+#' @export
+h2o.predicted_vs_actual_by_variable <- function(object,
+                                                newdata,
+                                                predicted,
+                                                variable
+) {
+  if (missing(object)) stop("Parameter 'object' needs to be specified.")
+  if (!is(object, "H2OModel")) stop("Parameter 'object' has to be an H2O model.")
+  .validate.H2OFrame(newdata, required = TRUE)
+
+  vi <- as.data.frame(.newExpr("predicted.vs.actual.by.var",
+                               object@model_id,
+                               newdata,
+                               paste0("'", variable, "'"),
+                               predicted
+  ), check.names = FALSE)
+  oldClass(vi) <- c("H2OTable", "data.frame")
+  attr(vi, "header") <- "Predicted vs Actual by Variable"
+  attr(vi, "description") <- ""
+  attr(vi, "formats") <- c("%s", rep_len("%5f", ncol(vi) - 1))
+  vi
 }

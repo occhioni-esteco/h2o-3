@@ -15,6 +15,7 @@ import water.udf.CFuncRef;
 import water.util.Log;
 import water.util.MRUtils;
 import water.util.ReflectionUtils;
+import water.util.TwoDimTable;
 
 import java.lang.reflect.Field;
 import java.util.Arrays;
@@ -54,6 +55,15 @@ public class StackedEnsembleModel extends Model<StackedEnsembleModel,StackedEnse
     if (_parms._metalearner_fold_assignment == AUTO) {
       _parms._metalearner_fold_assignment = Random;
     }
+  }
+
+  @Override
+  public boolean haveMojo() {
+    return super.haveMojo() 
+            && Stream.of(_parms._base_models)
+                     .filter(this::isUsefulBaseModel)
+                     .map(DKV::<Model>getGet)
+                     .allMatch(Model::haveMojo);
   }
 
   public static class StackedEnsembleParameters extends Model.Parameters {
@@ -134,6 +144,19 @@ public class StackedEnsembleModel extends Model<StackedEnsembleModel,StackedEnse
       if (null != _metalearner_fold_column)
         nonPredictors.add(_metalearner_fold_column);
       return nonPredictors.toArray(new String[0]);
+    }
+
+    @Override
+    public DistributionFamily getDistributionFamily() {
+      if (_metalearner_parameters != null)
+        return _metalearner_parameters.getDistributionFamily();
+      return super.getDistributionFamily();
+    }
+
+    @Override
+    public void setDistributionFamily(DistributionFamily distributionFamily) {
+      assert _metalearner_parameters != null;
+      _metalearner_parameters.setDistributionFamily(distributionFamily);
     }
   }
 
@@ -348,6 +371,7 @@ public class StackedEnsembleModel extends Model<StackedEnsembleModel,StackedEnse
     if (null != this._output._metalearner._output._cross_validation_metrics) {
       this._output._cross_validation_metrics = this._output._metalearner._output._cross_validation_metrics
               .deepCloneWithDifferentModelAndFrame(this, this._output._metalearner._parms.train());
+      this._output._cross_validation_metrics_summary = (TwoDimTable) this._output._metalearner._output._cross_validation_metrics_summary.clone();
     }
   }
 
@@ -417,14 +441,14 @@ public class StackedEnsembleModel extends Model<StackedEnsembleModel,StackedEnse
   private void inheritDistributionAndParms(Model.Parameters baseModelParms) {
     if (baseModelParms instanceof GLMModel.GLMParameters) {
       try {
-        _parms._metalearner_parameters._distribution = familyToDistribution(((GLMModel.GLMParameters) baseModelParms)._family);
+        _parms._metalearner_parameters.setDistributionFamily(familyToDistribution(((GLMModel.GLMParameters) baseModelParms)._family));
       } catch (IllegalArgumentException e) {
         Log.warn("Stacked Ensemble is not able to inherit distribution from GLM's family " + ((GLMModel.GLMParameters) baseModelParms)._family + ".");
       }
     } else if (baseModelParms instanceof DRFModel.DRFParameters) {
       inferBasicDistribution();
     } else {
-      _parms._metalearner_parameters._distribution = baseModelParms._distribution;
+      _parms._metalearner_parameters.setDistributionFamily(baseModelParms._distribution);
     }
     // deal with parameterized distributions
     switch (baseModelParms._distribution) {
@@ -457,8 +481,8 @@ public class StackedEnsembleModel extends Model<StackedEnsembleModel,StackedEnse
       inferBasicDistribution();
     } else {
       try {
-        metaParams._family = Enum.valueOf(GLMModel.GLMParameters.Family.class, baseModelParms._distribution.name());
-      } catch (IllegalArgumentException e) {
+        metaParams.setDistributionFamily(baseModelParms._distribution);
+      } catch (H2OIllegalArgumentException e) {
         Log.warn("Stacked Ensemble is not able to inherit family from a distribution " + baseModelParms._distribution + ".");
         inferBasicDistribution();
       }
@@ -490,25 +514,13 @@ public class StackedEnsembleModel extends Model<StackedEnsembleModel,StackedEnse
   }
 
   void inferBasicDistribution() {
-    if (Metalearners.getActualMetalearnerAlgo(_parms._metalearner_algorithm).equals(Metalearner.Algorithm.glm)) {
-      GLMModel.GLMParameters parms = (GLMModel.GLMParameters)_parms._metalearner_parameters;
-      parms._link = GLMModel.GLMParameters.Link.family_default;
       if (this._output.isBinomialClassifier()) {
-        parms._family = GLMModel.GLMParameters.Family.binomial;
+        _parms._metalearner_parameters.setDistributionFamily(DistributionFamily.bernoulli);
       } else if (this._output.isClassifier()) {
-        parms._family = GLMModel.GLMParameters.Family.multinomial;
+        _parms._metalearner_parameters.setDistributionFamily(DistributionFamily.multinomial);
       } else {
-        parms._family = GLMModel.GLMParameters.Family.gaussian;
+        _parms._metalearner_parameters.setDistributionFamily(DistributionFamily.gaussian);
       }
-    } else {
-      if (this._output.isBinomialClassifier()) {
-        _parms._metalearner_parameters._distribution = DistributionFamily.bernoulli;
-      } else if (this._output.isClassifier()) {
-        _parms._metalearner_parameters._distribution = DistributionFamily.multinomial;
-      } else {
-        _parms._metalearner_parameters._distribution = DistributionFamily.gaussian;
-      }
-    }
   }
 
   void checkAndInheritModelProperties() {
