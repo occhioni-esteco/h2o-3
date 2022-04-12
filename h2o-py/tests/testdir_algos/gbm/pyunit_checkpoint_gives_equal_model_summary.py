@@ -19,12 +19,12 @@ def test_checkpointing_gives_equal_model_summary():
     checkpointed_gbm = H2OGradientBoostingEstimator(ntrees=100, seed=1111, checkpoint=gbm.model_id)
     checkpointed_gbm.train(x=predictors, y=response, training_frame=prostate)
 
-    gbm20 = H2OGradientBoostingEstimator(ntrees=100, seed=1111)
-    gbm20.train(x=predictors, y=response, training_frame=prostate)
+    gbm_ref = H2OGradientBoostingEstimator(ntrees=100, seed=1111)
+    gbm_ref.train(x=predictors, y=response, training_frame=prostate)
     assert checkpointed_gbm.checkpoint == gbm.model_id
 
     checkpoint_summary = checkpointed_gbm._model_json["output"]["model_summary"]
-    expected_summary = gbm20._model_json["output"]["model_summary"]
+    expected_summary = gbm_ref._model_json["output"]["model_summary"]
     print(expected_summary)
     print(checkpoint_summary)
     assert_equals(expected_summary["model_size_in_bytes"][0], checkpoint_summary["model_size_in_bytes"][0])
