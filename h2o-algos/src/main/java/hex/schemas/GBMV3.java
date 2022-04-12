@@ -65,6 +65,7 @@ public class GBMV3 extends SharedTreeV3<GBM,GBMV3,GBMV3.GBMParametersV3> {
       "custom_metric_func",
       "custom_distribution_func",      
       "export_checkpoints_dir",
+      "in_training_checkpoints_dir",
       "monotone_constraints",
       "check_constant_response",
       "gainslift_bins", 
@@ -92,6 +93,9 @@ public class GBMV3 extends SharedTreeV3<GBM,GBMV3,GBMV3.GBMParametersV3> {
 
     @API(help="Bandwidth (sigma) of Gaussian multiplicative noise ~N(1,sigma) for tree node predictions", level = API.Level.expert, gridable = true)
     public double pred_noise_bandwidth;
+
+    @API(help="In-training checkpoints", level = API.Level.expert, gridable = false)
+    public String in_training_checkpoints_dir;
 
 //    // TODO debug only, remove!
 //    @API(help="Internal flag, use new version of histo tsk if set", level = API.Level.expert, gridable = false)
